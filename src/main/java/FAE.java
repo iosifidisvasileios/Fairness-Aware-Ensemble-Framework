@@ -3,13 +3,16 @@ import weka.classifiers.AbstractClassifier;
 import weka.classifiers.Classifier;
 import weka.classifiers.Evaluation;
 import weka.classifiers.meta.AdaBoostM1;
+import weka.clusterers.EM;
 import weka.core.Attribute;
 import weka.core.Instance;
 import weka.core.Instances;
 import weka.core.Utils;
+import weka.filters.Filter;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -23,12 +26,12 @@ public class FAE extends AbstractClassifier implements Classifier {
     private final static Logger log = Logger.getLogger(FAE.class.getName());
     private final AdaBoostM1 boost;
 
-    private int m_SampleNum = -1;
+    private int k_NumBags = -1;
     private double eqOp = 0.0;
     private double threshold ;
     private int m_SampleNumExecuted ;
     private Classifier m_Boost[];
-    private ArrayList<Double> equalOpp;
+//    private ArrayList<Double> equalOpp;
 
     public double getEqOp() {
         return eqOp;
@@ -56,6 +59,7 @@ public class FAE extends AbstractClassifier implements Classifier {
     public boolean isParallelization() {
         return parallelization;
     }
+    private HashMap<Integer, Instances> clusterAssignments;
 
     public void setParallelization(boolean parallelization) {
         this.parallelization = parallelization;
@@ -105,13 +109,15 @@ public class FAE extends AbstractClassifier implements Classifier {
         this.protectedValueName = protectedValueName;
         this.targetClass = targetClass;
         this.otherClass = otherClass;
-        equalOpp = new ArrayList<Double>();
 
         boost = new AdaBoostM1();
         boost.setNumIterations(25);
         boost.setClassifier(baseClassifier);
 
     }
+
+
+
 
     public void buildClassifier(final Instances data) throws Exception {
 
@@ -122,12 +128,17 @@ public class FAE extends AbstractClassifier implements Classifier {
             addSyntheticBias();
         }
         initializeLists();
-        m_Boost = AbstractClassifier.makeCopies(boost, this.m_SampleNum);
+        ClusterSummary clusteredFG = initializeClusters(FG);
+        ClusterSummary clusteredFR = initializeClusters(FR);
+        ClusterSummary clusteredDR = initializeClusters(DR);
+
+        m_Boost = AbstractClassifier.makeCopies(boost, this.k_NumBags);
 
         if (parallelization) {
             ExecutorService es = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() / 2);
-            for (int sampleNum = 0; sampleNum < m_SampleNum; sampleNum++) {
-                final Instances CurrentTraininSet = generateCandidateSets();
+            for (int sampleNum = 0; sampleNum < k_NumBags; sampleNum++) {
+                final Instances CurrentTraininSet = generateCandidateSetsFromCluster(clusteredFG, clusteredFR, clusteredDR);
+//                final Instances CurrentTraininSet = generateCandidateSetsRandomly();
 
                 final int finalSampleNum = sampleNum;
                 es.execute(new Runnable() {
@@ -142,14 +153,15 @@ public class FAE extends AbstractClassifier implements Classifier {
                 });
             }
             es.shutdown();
-            es.awaitTermination(m_SampleNum, TimeUnit.SECONDS);
+            es.awaitTermination(k_NumBags, TimeUnit.SECONDS);
 
         }else {
 
-            for (int sampleNum = 0; sampleNum < m_SampleNum; sampleNum++) {
-                final Instances CurrentTraininSet = generateCandidateSets();
+            for (int sampleNum = 0; sampleNum < k_NumBags; sampleNum++) {
+//                final Instances CurrentTraininSet = generateCandidateSetsRandomly();
+                final Instances CurrentTraininSet = generateCandidateSetsFromCluster(clusteredFG, clusteredFR, clusteredDR);
+
                 m_Boost[sampleNum].buildClassifier(CurrentTraininSet);
-//                log.info("classifier number = " + sampleNum);
             }
         }
 //        log.info("calculating EqOp ...");
@@ -170,7 +182,68 @@ public class FAE extends AbstractClassifier implements Classifier {
         }
     }
 
-    private Instances generateCandidateSets() {
+    private Instances generateCandidateSetsFromCluster(ClusterSummary clusteredFG, ClusterSummary clusteredFR, ClusterSummary clusteredDR) {
+
+        Instances output = new Instances(DG);
+
+
+        for (Instance inst: clusteredFG.getPoints()){
+            output.add(inst);
+        }
+
+        for (Instance inst: clusteredFR.getPoints()){
+            output.add(inst);
+        }
+
+        for (Instance inst: clusteredDR.getPoints()){
+            output.add(inst);
+        }
+
+
+        return output;
+    }
+
+    private ClusterSummary initializeClusters(Instances inputInstances) throws Exception {
+
+        clusterAssignments = new HashMap<Integer,Instances>();
+        weka.filters.unsupervised.attribute.Remove filter = new weka.filters.unsupervised.attribute.Remove();
+        filter.setAttributeIndices("" + (inputInstances.classIndex() + 1));
+        filter.setInputFormat(inputInstances);
+        Instances dataClusterer = Filter.useFilter(inputInstances, filter);
+
+
+
+        EM clusterer = new EM();
+        clusterer.setMaxIterations(100);
+        clusterer.setNumClusters(-1);
+        clusterer.buildClusterer(dataClusterer);
+
+        if (clusterer.numberOfClusters() > k_NumBags){
+            clusterer = new EM();
+            clusterer.setMaxIterations(100);
+            clusterer.setNumClusters(k_NumBags);
+            clusterer.buildClusterer(dataClusterer);
+        }
+
+        for (int i = 0; i < clusterer.numberOfClusters() ; i++) {
+            clusterAssignments.put(i, new Instances(inputInstances, 0));
+        }
+
+        for (int i=0; i < dataClusterer.size(); i++) {
+            clusterAssignments.get(clusterer.clusterInstance(dataClusterer.instance(i))).add(inputInstances.instance(i));
+        }
+
+        ClusterSummary clusterSummary = new ClusterSummary();
+        clusterSummary.setTotalInstances(inputInstances.size());
+        clusterSummary.setBagInstances(DG.size());
+
+        for(int i = 0 ; i < clusterer.numberOfClusters(); i++) {
+            clusterSummary.insertCluster(clusterAssignments.get(i), clusterAssignments.get(i).size());
+        }
+        return clusterSummary;
+    }
+
+    private Instances generateCandidateSetsRandomly() {
         Instances output = new Instances(TrainingSet, 0);
         DR.randomize(new Random());
         FG.randomize(new Random());
@@ -198,7 +271,7 @@ public class FAE extends AbstractClassifier implements Classifier {
         return  output;
     }
 
-    private void calculateRBB() throws Exception {
+    public void calculateRBB() throws Exception {
         final Evaluation eval = new Evaluation(TrainingSet);
 
         eval.evaluateModel(this, flipedInstances);
@@ -321,6 +394,7 @@ public class FAE extends AbstractClassifier implements Classifier {
                 }
             }
         }
+
         int maximum = -1;
         if (DR.size() > maximum)
             maximum = DR.size();
@@ -329,10 +403,10 @@ public class FAE extends AbstractClassifier implements Classifier {
         if (FG.size() > maximum)
             maximum = FG.size();
 
-//        log.info("maximum = " + maximum);
         int bags= (int)(1/((double) DG.size()/(double) maximum)) + 1;
+//        log.info("maximum instances = " + DG.size());
 //        log.info("bags = " + bags);
-        m_SampleNum = bags;
+        k_NumBags = bags;
 
     }
 
@@ -372,9 +446,8 @@ public class FAE extends AbstractClassifier implements Classifier {
     public double [] distributionForInstance(Instance ins) throws Exception {
 
         double sum[] = new double[ins.numClasses()];
-        for (int sampleNum = 0; sampleNum < m_SampleNum; sampleNum++) {
+        for (int sampleNum = 0; sampleNum < k_NumBags; sampleNum++) {
 
-            //            sum[(int) m_Boost[sampleNum].classifyInstance(ins)] += equalOpp.get(sampleNum);
             try {
                 double results[] = m_Boost[sampleNum].distributionForInstance(ins);
                 sum[0] = sum[0] + results[0];

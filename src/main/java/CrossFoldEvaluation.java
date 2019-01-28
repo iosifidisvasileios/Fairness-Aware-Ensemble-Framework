@@ -74,7 +74,6 @@ public class CrossFoldEvaluation {
     public static ArrayList<Double> kappaweightedconfidenceBoosting = new ArrayList<Double>();
 
 
-
     public static double t10McNemarScoreTB = 0;
     public static double testForSE = 0;
 
@@ -83,54 +82,52 @@ public class CrossFoldEvaluation {
     public static ArrayList<Double> discListthresholdBoosting = new ArrayList<Double>();
     public static ArrayList<Double> discListconfidenceBoosting = new ArrayList<Double>();
 
-    public static void main(String [] argv) throws Exception {
+    public static void main(String[] argv) throws Exception {
 
-/*        String modelString = argv[0];
-        final String parameters = argv[1];
-        final double bound = Double.valueOf(argv[2]);
-        final BufferedReader reader = new BufferedReader(new FileReader(argv[3]));
-*/
-        String modelString = "LR";
-        String parameters = "kdd";
+//        String modelString = argv[0];
+//        final String parameters = argv[1];
+
+        String modelString = "NB";
+        String parameters = "propublica";
+
         double bound = 0.0;
-//        final BufferedReader reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/violent_compassProcessed.arff"));
-//        final BufferedReader reader = new BufferedReader(new FileReader("/home/iosifidis/compass_zafar.arff"));
-//        final BufferedReader reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/adult.arff"));
-//        final BufferedReader reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/dutch.arff"));
-        final BufferedReader reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/kdd.arff"));
+        BufferedReader reader = null;
 
-        if(modelString.equals("NB")){
+        if (modelString.equals("NB")) {
             model = new NaiveBayes();
-        } else if(modelString.equals("DS")){
+        } else if (modelString.equals("DS")) {
             model = new DecisionStump();
-        }else if(modelString.equals("LR")){
+        } else if (modelString.equals("LR")) {
             Logistic xxx = new Logistic();
-            if(parameters.equals("kdd")) {
-                // big dataset use less iterations and gradient
+            if (parameters.equals("kdd")) {
+                // big dataset use less iterations
                 xxx.setMaxIts(5);
-//                xxx.setUseConjugateGradientDescent(true);
             }
             model = xxx;
-        } else{
+        } else {
             System.exit(1);
         }
 
-        if (parameters.equals("adult-gender")){
+        if (parameters.equals("adult-gender")) {
+            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/adult.arff"));
             protectedValueName = " Female";
             protectedValueIndex = 8;
             targetClass = " >50K";
             otherClass = " <=50K";
-        } else if(parameters.equals("adult-race")){
+        } else if (parameters.equals("adult-race")) {
+            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/adult.arff"));
             protectedValueName = " Minorities";
             protectedValueIndex = 7;
             targetClass = " >50K";
             otherClass = " <=50K";
-        } else if(parameters.equals("dutch")){
+        } else if (parameters.equals("dutch")) {
+            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/dutch.arff"));
             protectedValueName = "2"; // women
             protectedValueIndex = 0;
             targetClass = "2_1"; // high level
             otherClass = "5_4_9";
-        } else if (parameters.equals("kdd")){
+        } else if (parameters.equals("kdd")) {
+            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/kdd.arff"));
             protectedValueName = "Female";
             protectedValueIndex = 12;
             targetClass = "1";
@@ -141,27 +138,22 @@ public class CrossFoldEvaluation {
             targetClass = "bad";
             otherClass = "good";
         } else if (parameters.equals("propublica")) {
-            protectedValueName = "0";
+            reader = new BufferedReader(new FileReader("/home/iosifidis/compass_zafar.arff"));
+            protectedValueName = "1";
             protectedValueIndex = 4;
             targetClass = "1";
             otherClass = "-1";
-//            protectedValueName = "Female";
-//            protectedValueIndex =2;
-//            targetClass = "1";
-//            otherClass = "0";
-        }else{
+        } else {
             System.exit(1);
         }
-        int folds = 5;
+
         final Instances data = new Instances(reader);
         reader.close();
-        int iterations = 10;
-//        provideStatistics(data);
-//        System.exit(1);
-        log.info("dataset = " + parameters );
+        int iterations = 20;
+        provideStatistics(data);
+        log.info("dataset = " + parameters);
         int k = 0;
-        while (k < iterations){
-//        for (int k=0; k< iterations ; k++) {
+        while (k < iterations) {
             k++;
             try {
                 log.info("iteration = " + k);
@@ -177,22 +169,16 @@ public class CrossFoldEvaluation {
                 Instances test = new Instances(randData, trainSize, testSize);
                 testForSE += testSize;
 
-//            for (int n = 0; n < folds; n++) {
-//                log.info("running fold = " + n);
-//                Instances train = randData.trainCV(folds, n);
-//                Instances test = randData.testCV(folds, n);
-
                 final CrossFoldEvaluation FAEF = new CrossFoldEvaluation(AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, train, bound, true);
-//                final CrossFoldEvaluation easyEns = new CrossFoldEvaluation(AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, train, bound, false);
-                final SMT thresholdBoosting = new SMT(AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, bound);
                 final SDB confidenceBoosting = new SDB(AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, bound);
-                thresholdBoosting.setNumIterations(25);
-                thresholdBoosting.buildClassifier(train);
-                log.info("SMT Training");
                 confidenceBoosting.setNumIterations(25);
                 confidenceBoosting.buildClassifier(train);
-                log.info("SDB Training");
-
+//                final SMT thresholdBoosting = new SMT(AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, bound);
+//                thresholdBoosting.setNumIterations(25);
+//                thresholdBoosting.buildClassifier(train);
+//                log.info("SMT Training");
+//                log.info("SDB Training");
+//
                 double[] measures = EvaluateClassifier(FAEF.getBoost(), train, test);
                 double disc = equalOpportunityMeasurement(FAEF.getBoost(), test, protectedValueIndex, protectedValueName, targetClass, otherClass);
                 FBFaccuracy.add(measures[0]);
@@ -201,7 +187,7 @@ public class CrossFoldEvaluation {
                 FBFf1weighted.add(measures[3]);
                 FBFkappa.add(measures[4]);
                 FBFdiscList.add(disc);
-                double[] FBFpredictions = getBinaryPredictions(FAEF.getBoost(), test);
+//                double[] FBFpredictions = getBinaryPredictions(FAEF.getBoost(), test);
 //            log.info("finished FAE");
 
                 // if EqOp is 0 then no special treatment is employed, this equals to OB model
@@ -214,9 +200,10 @@ public class CrossFoldEvaluation {
                 Easyf1weighted.add(measures[3]);
                 Easykappa.add(measures[4]);
                 EasydiscList.add(disc);
-                double[] Easypredictions = getBinaryPredictions(FAEF.getBoost(), test);
+//                double[] Easypredictions = getBinaryPredictions(FAEF.getBoost(), test);
 //            log.info("finished Easy");
 
+                /*
                 measures = EvaluateClassifier(thresholdBoosting, train, test);
                 disc = equalOpportunityMeasurement(thresholdBoosting, test, protectedValueIndex, protectedValueName, targetClass, otherClass);
                 accuracythresholdBoosting.add(measures[0]);
@@ -226,6 +213,7 @@ public class CrossFoldEvaluation {
                 kappaweightedthresholdBoosting.add(measures[4]);
                 discListthresholdBoosting.add(disc);
                 double[] TBpredictions = getBinaryPredictions(thresholdBoosting, test);
+*/
 
 //            calculateMcNemarSignificantScore(TBpredictions, t5predictions, t10predictions, t50predictions, t100predictions, t200predictions,  "TB");
                 measures = EvaluateClassifier(confidenceBoosting, train, test);
@@ -238,14 +226,13 @@ public class CrossFoldEvaluation {
                 discListconfidenceBoosting.add(disc);
                 double[] CBpredictions = getBinaryPredictions(confidenceBoosting, test);
 
-                //            calculateMcNemarSignificantScore(CBpredictions , t5predictions, t10predictions, t50predictions, t100predictions,t200predictions,  "CB");
-//            outputPredictionsToFile(TBpredictions, CBpredictions ,Easypredictions,  FBFpredictions, parameters, modelString);
-//            outputPredictionsToFile(FBFpredictions, Easypredictions, parameters, modelString);
-//            }
-            }catch (Exception e){
-                log.info("crushed, rerun iteration");
+/*                            calculateMcNemarSignificantScore(CBpredictions , t5predictions, t10predictions, t50predictions, t100predictions,t200predictions,  "CB");
+            outputPredictionsToFile(TBpredictions, CBpredictions ,Easypredictions,  FBFpredictions, parameters, modelString);
+            outputPredictionsToFile(FBFpredictions, Easypredictions, parameters, modelString);*/
+            } catch (Exception e) {
+                log.info("crushed, rerun iteration:");
+                e.printStackTrace();
                 k--;
-                continue;
             }
 
         }
@@ -282,16 +269,15 @@ public class CrossFoldEvaluation {
 
     }
 
-    private static void outputPredictionsToFile(double [] SMT, double [] SDB, double[] OB, double[] BFF, String parameters, String modelString) throws IOException {
+    private static void outputPredictionsToFile(double[] SMT, double[] SDB, double[] OB, double[] BFF, String parameters, String modelString) throws IOException {
 
 
-
-        FileWriter fstream = new FileWriter("significance/" + parameters +"_" + modelString + ".csv", true); //true tells to append data.
+        FileWriter fstream = new FileWriter("significance/" + parameters + "_" + modelString + ".csv", true); //true tells to append data.
         BufferedWriter out = new BufferedWriter(fstream);
         out.write("index\tSDB\tSMT\tOB\tBFF\n");
 
-        for (int i=0;i < BFF.length; i++){
-            out.write(i + "\t" + SDB[i] + "\t" + SMT[i] +"\t" + OB[i] +"\t" + BFF[i] + "\n");
+        for (int i = 0; i < BFF.length; i++) {
+            out.write(i + "\t" + SDB[i] + "\t" + SMT[i] + "\t" + OB[i] + "\t" + BFF[i] + "\n");
         }
 
         out.close();
@@ -305,18 +291,18 @@ public class CrossFoldEvaluation {
         ArrayList<Instance> DR = new ArrayList<Instance>();
         ArrayList<Instance> FG = new ArrayList<Instance>();
         ArrayList<Instance> FR = new ArrayList<Instance>();
-        for (Instance instance : data){
+        for (Instance instance : data) {
             if (instance.stringValue(protectedValueIndex).equals(protectedValueName)) {
                 if (instance.stringValue(instance.classIndex()).equals(targetClass)) {
 
                     DG.add(instance);
-                }else if(instance.stringValue(instance.classIndex()).equals(otherClass)){
+                } else if (instance.stringValue(instance.classIndex()).equals(otherClass)) {
                     DR.add(instance);
                 }
-            }else {
+            } else {
                 if (instance.stringValue(instance.classIndex()).equals(targetClass)) {
                     FG.add(instance);
-                }else if(instance.stringValue(instance.classIndex()).equals(otherClass)){
+                } else if (instance.stringValue(instance.classIndex()).equals(otherClass)) {
                     FR.add(instance);
                 }
             }
@@ -352,27 +338,28 @@ public class CrossFoldEvaluation {
 
         if (option.equals("TB")) {
             t10McNemarScoreTB += Math.pow(abs(score10[1] - score10[2]) - 1, 2) / (score10[1] + score10[2]);
-        }else if(option.equals("CB")){
+        } else if (option.equals("CB")) {
             t10McNemarScoreCB += Math.pow(abs(score10[1] - score10[2]) - 1, 2) / (score10[1] + score10[2]);
         }
     }
 
     private static double[] calculateVectorDifference(double[] first, double[] second) {
 
-        double [] output = new double[4];
+        double[] output = new double[4];
         double a = 0, b = 0, c = 0, d = 0;
 
-        for (int i=0; i< first.length; i++){
-            if (first[i] == 0.0 && second[i] == 0.0){
-                a ++;
-            }else if(first[i] == 0.0 && second[i] == 1.0){
-                b ++;
-            }else if(first[i] == 1.0 && second[i] == 0.0){
-                c ++;
-            }else if(first[i] == 1.0 && second[i] == 1.0){
-                d ++;
+        for (int i = 0; i < first.length; i++) {
+            if (first[i] == 0.0 && second[i] == 0.0) {
+                a++;
+            } else if (first[i] == 0.0 && second[i] == 1.0) {
+                b++;
+            } else if (first[i] == 1.0 && second[i] == 0.0) {
+                c++;
+            } else if (first[i] == 1.0 && second[i] == 1.0) {
+                d++;
             }
         }
+
         output[0] = a;
         output[1] = b;
         output[2] = c;
@@ -383,9 +370,9 @@ public class CrossFoldEvaluation {
     private static double[] getBinaryPredictions(Classifier clf, Instances test) throws Exception {
         double preds[] = new double[test.size()];
         int index = 0;
-        for (Instance instance: test){
+        for (Instance instance : test) {
             preds[index] = clf.classifyInstance(instance);
-            index ++;
+            index++;
         }
 
         return preds;
@@ -395,32 +382,32 @@ public class CrossFoldEvaluation {
     public static void calculateSD(ArrayList<Double> numArray, String measurement) {
         double sum = 0.0, standardDeviation = 0.0;
 
-        for(double num : numArray) {
+        for (double num : numArray) {
             sum += num;
         }
 
-        double mean = sum/numArray.size();
+        double mean = sum / numArray.size();
 
-        for(double num: numArray) {
-            standardDeviation = standardDeviation + Math.pow(num - mean, 2)/numArray.size();
+        for (double num : numArray) {
+            standardDeviation = standardDeviation + Math.pow(num - mean, 2) / numArray.size();
         }
 
         standardDeviation = Math.sqrt(standardDeviation);
 //        log.info(measurement + " mean = " + mean  + ", st.Dev = " + standardDeviation);
 
 
-        double standardError = standardDeviation/Math.sqrt(testForSE);
-        log.info(measurement + " mean = " + mean  + ", St.Error = " + standardError +  ", st.Dev = " + standardDeviation);
+        double standardError = standardDeviation / Math.sqrt(testForSE);
+        log.info(measurement + " mean = " + mean + ", St.Error = " + standardError + ", st.Dev = " + standardDeviation);
 
 
     }
 
 
-    public static double [] EvaluateClassifier(Classifier classifier, Instances training, Instances testing) throws Exception {
+    public static double[] EvaluateClassifier(Classifier classifier, Instances training, Instances testing) throws Exception {
 
         final Evaluation eval = new Evaluation(training);
         eval.evaluateModel(classifier, testing);
-        return new double []{eval.pctCorrect(), eval.weightedAreaUnderPRC()*100, eval.weightedAreaUnderROC()*100, eval.weightedFMeasure()*100, eval.kappa()*100};
+        return new double[]{eval.pctCorrect(), eval.weightedAreaUnderPRC() * 100, eval.weightedAreaUnderROC() * 100, eval.weightedFMeasure() * 100, eval.kappa() * 100};
     }
 
     private static double equalOpportunityMeasurement(Classifier classifier,
@@ -444,7 +431,7 @@ public class CrossFoldEvaluation {
         double correctlyClassified = 0.0;
 
 
-        for(Instance ins: TestingPredictions){
+        for (Instance ins : TestingPredictions) {
             double label = classifier.classifyInstance(ins);
             // WOMEN
             if (ins.stringValue(protectedValueIndex).equals(protectedValueName)) {
@@ -456,21 +443,21 @@ public class CrossFoldEvaluation {
                     if (ins.stringValue(ins.classIndex()).equals(targetClass)) {
                         tp_female++;
 
-                    }else if(ins.stringValue(ins.classIndex()).equals(otherClass)){
+                    } else if (ins.stringValue(ins.classIndex()).equals(otherClass)) {
                         tn_female++;
                     }
-                }else{
+                } else {
                     // error has been made on TN so it's FP
                     if (ins.stringValue(ins.classIndex()).equals(targetClass)) {
                         fn_female++;
 
-                    }else if (ins.stringValue(ins.classIndex()).equals(otherClass)){
+                    } else if (ins.stringValue(ins.classIndex()).equals(otherClass)) {
                         // error has been made on TP so it's FN
                         fp_female++;
 
                     }
                 }
-            }else{
+            } else {
                 // correctly classified
                 if (label == ins.classValue()) {
                     correctlyClassified++;
@@ -478,17 +465,17 @@ public class CrossFoldEvaluation {
                     if (ins.stringValue(ins.classIndex()).equals(targetClass)) {
                         tp_male++;
 
-                    }else if(ins.stringValue(ins.classIndex()).equals(otherClass)){
+                    } else if (ins.stringValue(ins.classIndex()).equals(otherClass)) {
                         tn_male++;
 
                     }
-                }else{
+                } else {
                     if (ins.stringValue(ins.classIndex()).equals(targetClass)) {
                         // error has been made on TP so it's FN
 
                         fn_male++;
 
-                    }else if(ins.stringValue(ins.classIndex()).equals(otherClass)){
+                    } else if (ins.stringValue(ins.classIndex()).equals(otherClass)) {
                         // error has been made on TN so it's FP
 
                         fp_male++;
@@ -497,7 +484,7 @@ public class CrossFoldEvaluation {
                 }
             }
         }
-        return 100*((tp_male)/(tp_male + fn_male) - (tp_female)/(tp_female + fn_female));
+        return 100 * ((tp_male) / (tp_male + fn_male) - (tp_female) / (tp_female + fn_female));
     }
 }
 

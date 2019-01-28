@@ -57,18 +57,14 @@ public class RrbEvaluation {
     public static ArrayList<Double> SDB_RBB = new ArrayList<Double>();
 
     public static void main(String [] argv) throws Exception {
-//        String modelString = argv[0];
-//        final String parameters = argv[1];
-//        final double bound = Double.valueOf(argv[2]);
-//        final BufferedReader reader = new BufferedReader(new FileReader(argv[3]));
+        String modelString = argv[0];
+        final String parameters = argv[1];
+        BufferedReader reader = null;
 
-        String modelString = "NB";
-        String parameters = "propublica";
+//        String modelString = "DS";
+//        String parameters = "propublica";
         double bound = 0.0;
-        final BufferedReader reader = new BufferedReader(new FileReader("/home/iosifidis/compass_zafar.arff"));
-//        final BufferedReader reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/adult.arff"));
-//        final BufferedReader reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/dutch.arff"));
-//        final BufferedReader reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/kdd.arff"));
+
         log.info("dataset = " + parameters);
         if(modelString.equals("NB")){
             model = new NaiveBayes();
@@ -86,22 +82,26 @@ public class RrbEvaluation {
             System.exit(1);
         }
 
-        if (parameters.equals("adult-gender")){
+        if (parameters.equals("adult-gender")) {
+            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/adult.arff"));
             protectedValueName = " Female";
             protectedValueIndex = 8;
             targetClass = " >50K";
             otherClass = " <=50K";
-        } else if(parameters.equals("adult-race")){
+        } else if (parameters.equals("adult-race")) {
+            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/adult.arff"));
             protectedValueName = " Minorities";
             protectedValueIndex = 7;
             targetClass = " >50K";
             otherClass = " <=50K";
-        } else if(parameters.equals("dutch")){
+        } else if (parameters.equals("dutch")) {
+            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/dutch.arff"));
             protectedValueName = "2"; // women
             protectedValueIndex = 0;
             targetClass = "2_1"; // high level
             otherClass = "5_4_9";
-        } else if (parameters.equals("kdd")){
+        } else if (parameters.equals("kdd")) {
+            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/kdd.arff"));
             protectedValueName = "Female";
             protectedValueIndex = 12;
             targetClass = "1";
@@ -112,25 +112,23 @@ public class RrbEvaluation {
             targetClass = "bad";
             otherClass = "good";
         } else if (parameters.equals("propublica")) {
-            protectedValueName = "0";
+            reader = new BufferedReader(new FileReader("/home/iosifidis/compass_zafar.arff"));
+            protectedValueName = "1";
             protectedValueIndex = 4;
             targetClass = "1";
             otherClass = "-1";
-//            protectedValueName = "Female";
-//            protectedValueIndex =2;
-//            targetClass = "1";
-//            otherClass = "0";
-        } else{
+        } else {
             System.exit(1);
-
         }
 
 
         final Instances data = new Instances(reader);
         reader.close();
 
-        for (double flipPercentage = 0.1; flipPercentage <= 0.61; flipPercentage += 0.1) {
-            for (int k = 0; k < 5; k++) {
+        for (double flipPercentage = 0.1; flipPercentage <= .61; flipPercentage += 0.1) {
+            log.info("k = " + flipPercentage);
+
+            for (int k = 0; k < 10; k++) {
 //                log.info("k = " + k);
                 final Random rand = new Random((int) System.currentTimeMillis());   // create seeded number generator
                 final Instances randData = new Instances(data);   // create copy of original data
@@ -151,35 +149,36 @@ public class RrbEvaluation {
                         bound,
                         flipPercentage,
                         true);
-                FAE_RBB.add(FBF.getRrb());
+                FAE_RBB.add(FBF.boost.getRrbVaule() * 100);
 //                log.info("finished FAE");
 
-                RrbEvaluation EasyEnsemble = new RrbEvaluation(AbstractClassifier.makeCopy(model),
-                        protectedValueIndex,
-                        protectedValueName,
-                        targetClass,
-                        otherClass,
-                        new Instances(train),
-                        bound,
-                        flipPercentage,
-                        false);
-
-                OB_RBB.add(EasyEnsemble.getRrb());
+//                RrbEvaluation EasyEnsemble = new RrbEvaluation(AbstractClassifier.makeCopy(model),
+//                        protectedValueIndex,
+//                        protectedValueName,
+//                        targetClass,
+//                        otherClass,
+//                        new Instances(train),
+//                        bound,
+//                        flipPercentage,
+//                        false);
+                FBF.boost.setEqOp(0.0);
+                FBF.boost.calculateRBB();
+                OB_RBB.add(FBF.boost.getRrbVaule() * 100);
 //                log.info("finished OB");
 
-                SMT thresholdBoosting = new SMT(AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, bound);
-                thresholdBoosting.setNumIterations(25);
-                thresholdBoosting.setRRBOption(true);
-                thresholdBoosting.setFlipProportion(flipPercentage);
-                thresholdBoosting.buildClassifier(new Instances(train));
-                SMT_RBB.add(thresholdBoosting.getRrb());
-
-                SDB confidenceBoosting = new SDB (AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, bound);
-                confidenceBoosting.setNumIterations(25);
-                confidenceBoosting.setRRBOption(true);
-                confidenceBoosting.setFlipProportion(flipPercentage);
-                confidenceBoosting.buildClassifier(new Instances(train));
-                SDB_RBB.add(confidenceBoosting.getRrb());
+//                SMT thresholdBoosting = new SMT(AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, bound);
+//                thresholdBoosting.setNumIterations(25);
+//                thresholdBoosting.setRRBOption(true);
+//                thresholdBoosting.setFlipProportion(flipPercentage);
+//                thresholdBoosting.buildClassifier(new Instances(train));
+//                SMT_RBB.add(thresholdBoosting.getRrb());
+//
+//                SDB confidenceBoosting = new SDB (AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, bound);
+//                confidenceBoosting.setNumIterations(25);
+//                confidenceBoosting.setRRBOption(true);
+//                confidenceBoosting.setFlipProportion(flipPercentage);
+//                confidenceBoosting.buildClassifier(new Instances(train));
+//                SDB_RBB.add(confidenceBoosting.getRrb());
 
             }
 

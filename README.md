@@ -13,6 +13,7 @@ This repo contains the source code of FAEF written in java. FAE file contains ou
 To execute the code, one can use the default settings such as Decision Stumps, Naive Bayes or Logistic Regression as weak learners. 
 
 i.e., java -jar FairnessAwareEnsemble CrossFoldEvaluation <weak_learner> <dataset_selection> <directory_of_arff.arff>
+
 java -jar FairnessAwareEnsemble CrossFoldEvaluation LR adult-gender /home/directory/adult.arff
 
 So far the code supports only weka instances thus arff files. Also, default parameters such as favored and deprived popoulations and target class have been initialised in CrossFoldEvaluation class.  

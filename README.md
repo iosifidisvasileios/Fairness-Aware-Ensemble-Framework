@@ -9,3 +9,10 @@ In our setup we employ equal opportunity as fairness function that checks the di
 In addition, FAEF can be altered to accomodate fairness functions which take into consideration true and predicted labels. 
 
 This repo contains the source code of FAEF written in java. FAE file contains our framework which can be compared with other methods CrossFoldEvaluation file. The project is under maven support.
+
+To execute the code, one can use the default settings such as Decision Stumps, Naive Bayes or Logistic Regression as weak learners. 
+
+i.e., java -jar FairnessAwareEnsemble CrossFoldEvaluation <weak_learner> <dataset_selection> <directory_of_arff.arff>
+java -jar FairnessAwareEnsemble CrossFoldEvaluation LR adult-gender /home/directory/adult.arff
+
+So far the code supports only weka instances thus arff files. Also, default parameters such as favored and deprived popoulations and target class have been initialised in CrossFoldEvaluation class.  

@@ -83,11 +83,11 @@ public class CrossFoldEvaluation {
 
     public static void main(String[] argv) throws Exception {
 
-//        String modelString = argv[0];
-//        final String parameters = argv[1];
+        String modelString = argv[0];
+        final String parameters = argv[1];
 
-        String modelString = "LR";
-        String parameters = "adult-gender";
+//        String modelString = "LR";
+//        String parameters = "adult-gender";
 
         double bound = 0.0;
         BufferedReader reader = null;
@@ -108,25 +108,29 @@ public class CrossFoldEvaluation {
         }
 
         if (parameters.equals("adult-gender")) {
-            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/adult.arff"));
+//            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/adult.arff"));
+            reader = new BufferedReader(new FileReader(argv[2]));
             protectedValueName = " Female";
             protectedValueIndex = 8;
             targetClass = " >50K";
             otherClass = " <=50K";
         } else if (parameters.equals("adult-race")) {
-            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/adult.arff"));
+//            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/adult.arff"));
+            reader = new BufferedReader(new FileReader(argv[2]));
             protectedValueName = " Minorities";
             protectedValueIndex = 7;
             targetClass = " >50K";
             otherClass = " <=50K";
         } else if (parameters.equals("dutch")) {
-            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/dutch.arff"));
+//            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/dutch.arff"));
+            reader = new BufferedReader(new FileReader(argv[2]));
             protectedValueName = "2"; // women
             protectedValueIndex = 0;
             targetClass = "2_1"; // high level
             otherClass = "5_4_9";
         } else if (parameters.equals("kdd")) {
-            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/kdd.arff"));
+//            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/kdd.arff"));
+            reader = new BufferedReader(new FileReader(argv[2]));
             protectedValueName = "Female";
             protectedValueIndex = 12;
             targetClass = "1";
@@ -137,7 +141,8 @@ public class CrossFoldEvaluation {
             targetClass = "bad";
             otherClass = "good";
         } else if (parameters.equals("propublica")) {
-            reader = new BufferedReader(new FileReader("/home/iosifidis/compass_zafar.arff"));
+//            reader = new BufferedReader(new FileReader("/home/iosifidis/compass_zafar.arff"));
+            reader = new BufferedReader(new FileReader(argv[2]));
             protectedValueName = "1";
             protectedValueIndex = 4;
             targetClass = "1";

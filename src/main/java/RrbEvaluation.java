@@ -66,6 +66,7 @@ public class RrbEvaluation {
         double bound = 0.0;
 
         log.info("dataset = " + parameters);
+
         if(modelString.equals("NB")){
             model = new NaiveBayes();
         } else if(modelString.equals("DS")){
@@ -121,26 +122,22 @@ public class RrbEvaluation {
             System.exit(1);
         }
 
-
         final Instances data = new Instances(reader);
         reader.close();
 
         for (double flipPercentage = 0.1; flipPercentage <= .61; flipPercentage += 0.1) {
             log.info("k = " + flipPercentage);
 
-            for (int k = 0; k < 10; k++) {
-//                log.info("k = " + k);
+            for (int k = 0; k < 5; k++) {
                 final Random rand = new Random((int) System.currentTimeMillis());   // create seeded number generator
                 final Instances randData = new Instances(data);   // create copy of original data
                 randData.randomize(rand);         // randomize data with number generator
                 randData.setClassIndex(data.numAttributes() - 1);
 
                 int trainSize = (int) Math.round(randData.numInstances() * 0.677);
-//                int testSize = randData.numInstances() - trainSize;
                 Instances train = new Instances(randData, 0, trainSize);
-//                Instances test = new Instances(randData, trainSize, testSize);
 
-                RrbEvaluation FBF = new RrbEvaluation(AbstractClassifier.makeCopy(model),
+                RrbEvaluation FAEF = new RrbEvaluation(AbstractClassifier.makeCopy(model),
                         protectedValueIndex,
                         protectedValueName,
                         targetClass,
@@ -149,36 +146,34 @@ public class RrbEvaluation {
                         bound,
                         flipPercentage,
                         true);
-                FAE_RBB.add(FBF.boost.getRrbVaule() * 100);
-//                log.info("finished FAE");
+                FAE_RBB.add(FAEF.boost.getRrbVaule() * 100);
 
-//                RrbEvaluation EasyEnsemble = new RrbEvaluation(AbstractClassifier.makeCopy(model),
-//                        protectedValueIndex,
-//                        protectedValueName,
-//                        targetClass,
-//                        otherClass,
-//                        new Instances(train),
-//                        bound,
-//                        flipPercentage,
-//                        false);
-                FBF.boost.setEqOp(0.0);
-                FBF.boost.calculateRBB();
-                OB_RBB.add(FBF.boost.getRrbVaule() * 100);
-//                log.info("finished OB");
+                RrbEvaluation OB = new RrbEvaluation(AbstractClassifier.makeCopy(model),
+                        protectedValueIndex,
+                        protectedValueName,
+                        targetClass,
+                        otherClass,
+                        new Instances(train),
+                        bound,
+                        flipPercentage,
+                        false);
+                FAEF.boost.setEqOp(0.0);
+                FAEF.boost.calculateRBB();
+                OB_RBB.add(FAEF.boost.getRrbVaule() * 100);
 
-//                SMT thresholdBoosting = new SMT(AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, bound);
-//                thresholdBoosting.setNumIterations(25);
-//                thresholdBoosting.setRRBOption(true);
-//                thresholdBoosting.setFlipProportion(flipPercentage);
-//                thresholdBoosting.buildClassifier(new Instances(train));
-//                SMT_RBB.add(thresholdBoosting.getRrb());
-//
-//                SDB confidenceBoosting = new SDB (AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, bound);
-//                confidenceBoosting.setNumIterations(25);
-//                confidenceBoosting.setRRBOption(true);
-//                confidenceBoosting.setFlipProportion(flipPercentage);
-//                confidenceBoosting.buildClassifier(new Instances(train));
-//                SDB_RBB.add(confidenceBoosting.getRrb());
+                SMT thresholdBoosting = new SMT(AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, bound);
+                thresholdBoosting.setNumIterations(25);
+                thresholdBoosting.setRRBOption(true);
+                thresholdBoosting.setFlipProportion(flipPercentage);
+                thresholdBoosting.buildClassifier(new Instances(train));
+                SMT_RBB.add(thresholdBoosting.getRrb());
+
+                SDB confidenceBoosting = new SDB (AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, bound);
+                confidenceBoosting.setNumIterations(25);
+                confidenceBoosting.setRRBOption(true);
+                confidenceBoosting.setFlipProportion(flipPercentage);
+                confidenceBoosting.buildClassifier(new Instances(train));
+                SDB_RBB.add(confidenceBoosting.getRrb());
 
             }
 
@@ -188,6 +183,7 @@ public class RrbEvaluation {
 
             calculateSD(SMT_RBB, "SMT RBB for n = " + flipPercentage + ",");
             calculateSD(SDB_RBB, "SDB RBB for n = " + flipPercentage + ",");
+
             log.info("*******************************");
             FAE_RBB.clear();
             OB_RBB.clear();

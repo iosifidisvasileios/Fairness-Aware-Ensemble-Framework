@@ -75,10 +75,8 @@ public class CrossFoldEvaluation {
     public static ArrayList<Double> kappaweightedconfidenceBoosting = new ArrayList<Double>();
 
 
-    public static double t10McNemarScoreTB = 0;
-    public static double testForSE = 0;
 
-    public static double t10McNemarScoreCB = 0;
+    public static double testForSE = 0;
 
     public static ArrayList<Double> discListthresholdBoosting = new ArrayList<Double>();
     public static ArrayList<Double> discListconfidenceBoosting = new ArrayList<Double>();

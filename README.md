@@ -14,6 +14,6 @@ To execute the code, one can use the default settings such as Decision Stumps, N
 
 i.e., java -jar FairnessAwareEnsemble CrossFoldEvaluation <weak_learner> <dataset_selection> <directory_of_arff.arff>
 
-java -jar FairnessAwareEnsemble CrossFoldEvaluation LR adult-gender /home/directory/adult.arff
+i.e., java -jar FairnessAwareEnsemble CrossFoldEvaluation LR adult-gender /home/directory/adult.arff
 
 So far the code supports only weka instances thus arff files. Also, default parameters such as favored and deprived popoulations and target class have been initialised in CrossFoldEvaluation class.  

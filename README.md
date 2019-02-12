@@ -16,4 +16,4 @@ i.e., java -jar FairnessAwareEnsemble CrossFoldEvaluation <weak_learner> <datase
 
 i.e., java -jar FairnessAwareEnsemble CrossFoldEvaluation LR adult-gender /home/directory/adult.arff
 
-So far the code supports only weka instances thus arff files. Also, default parameters such as favored and deprived popoulations and target class have been initialised in CrossFoldEvaluation class.  
+So far the code supports only weka instances thus arff files. Also, default parameters such as favored and deprived popoulations and target class have been initialised in CrossFoldEvaluation class for specific datasets such as adult-census, adult-census-kdd, dutch-census and propublica.  

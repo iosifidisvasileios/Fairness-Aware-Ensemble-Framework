@@ -1,7 +1,6 @@
 import org.apache.log4j.Logger;
 import weka.classifiers.AbstractClassifier;
 import weka.classifiers.Classifier;
-import weka.classifiers.Evaluation;
 import weka.classifiers.meta.AdaBoostM1;
 import weka.clusterers.EM;
 import weka.core.Attribute;
@@ -24,14 +23,39 @@ import static java.lang.Math.abs;
 public class FAE extends AbstractClassifier implements Classifier {
 
     private final static Logger log = Logger.getLogger(FAE.class.getName());
-    private final AdaBoostM1 boost;
+    private AdaBoostM1 adaBoost;
 
     private int k_NumBags = -1;
+
+
+    public static final int EM_CLUSTERING = 0;
+    public static final int KNN_WITH_ELBOW = 1;
+    private int bagsForOB;
+    private boolean optimize = true;
+
+    public int getDECIDE_CLUSTER_METHOD() {
+        return DECIDE_CLUSTER_METHOD;
+    }
+
+    public void setDECIDE_CLUSTER_METHOD(int DECIDE_CLUSTER_METHOD) {
+        this.DECIDE_CLUSTER_METHOD = DECIDE_CLUSTER_METHOD;
+    }
+
+    /** Validation method to use. */
+    protected int DECIDE_CLUSTER_METHOD = KNN_WITH_ELBOW;
+
+    public int getMaxClusterIteration() {
+        return maxClusterIteration;
+    }
+
+    public void setMaxClusterIteration(int maxClusterIteration) {
+        this.maxClusterIteration = maxClusterIteration;
+    }
+
+    private int maxClusterIteration = 100;
     private double eqOp = 0.0;
-    private double threshold ;
-    private int m_SampleNumExecuted ;
-    private Classifier m_Boost[];
-//    private ArrayList<Double> equalOpp;
+    private double threshold = 0.5;
+    private ArrayList<Classifier> m_Boost = new ArrayList<>();
 
     public double getEqOp() {
         return eqOp;
@@ -39,6 +63,7 @@ public class FAE extends AbstractClassifier implements Classifier {
 
     public void setEqOp(double eqOp) {
         this.eqOp = eqOp;
+        this.k_NumBags = bagsForOB;
     }
 
     private String protectedValueName;
@@ -49,12 +74,14 @@ public class FAE extends AbstractClassifier implements Classifier {
     private String otherClass;
     private Instances TrainingSet;
     private double bound;
-    private double flipProportion;
-    private Instances flipedInstances;
-    private Instances FR;
-    private Instances DG;
-    private Instances DR;
-    private Instances FG;
+    private  Instances FR;
+    private  Instances DG;
+    private  Instances DR;
+    private  Instances FG;
+
+    private ClusterSummary clusteredFG;
+    private ClusterSummary clusteredFR;
+    private ClusterSummary clusteredDR;
 
     public boolean isParallelization() {
         return parallelization;
@@ -66,34 +93,7 @@ public class FAE extends AbstractClassifier implements Classifier {
     }
 
     private boolean parallelization = false;
-
-    public double getFlipProportion() {
-        return flipProportion;
-    }
-
-    public void setFlipProportion(double flipProportion) {
-        this.flipProportion = flipProportion;
-    }
-
-    public double getRrbVaule() {
-        return rrbVaule;
-    }
-
-    public void setRrbVaule(double rrbVaule) {
-        this.rrbVaule = rrbVaule;
-    }
-
-    private double rrbVaule;
-
-    private boolean RRBOption= false;
-
-    public boolean isRRBOption() {
-        return RRBOption;
-    }
-
-    public void setRRBOption(boolean RRBOption) {
-        this.RRBOption = RRBOption;
-    }
+    private boolean userDefinedBags= false;
 
     public FAE(Classifier baseClassifier,
                int protectedValueIndex,
@@ -110,12 +110,16 @@ public class FAE extends AbstractClassifier implements Classifier {
         this.targetClass = targetClass;
         this.otherClass = otherClass;
 
-        boost = new AdaBoostM1();
-        boost.setNumIterations(25);
-        boost.setClassifier(baseClassifier);
-
+        adaBoost = new AdaBoostM1();
+        adaBoost.setNumIterations(25);
+        adaBoost.setClassifier(baseClassifier);
     }
 
+
+
+    public int getK_NumBags() {
+        return k_NumBags;
+    }
 
 
 
@@ -124,29 +128,46 @@ public class FAE extends AbstractClassifier implements Classifier {
         data.deleteWithMissingClass();
         TrainingSet = data;
 
-        if(RRBOption){
-            addSyntheticBias();
-        }
-        initializeLists();
-        ClusterSummary clusteredFG = initializeClusters(FG);
-        ClusterSummary clusteredFR = initializeClusters(FR);
-        ClusterSummary clusteredDR = initializeClusters(DR);
 
-        m_Boost = AbstractClassifier.makeCopies(boost, this.k_NumBags);
+        log.info("initializing clusters");
+
+        initializeLists();
+        if (DECIDE_CLUSTER_METHOD == 0) {
+            clusteredFG = initializeEM_Clusters(FG);
+            log.info("non-prot pos, clustered");
+            clusteredFR = initializeEM_Clusters(FR);
+            log.info("non-prot neg, clustered");
+            clusteredDR = initializeEM_Clusters(DR);
+            log.info("prot neg, clustered");
+
+        } else if (DECIDE_CLUSTER_METHOD == 1) {
+            clusteredFG = initializeKNN_Clusters(FG);
+            log.info("non-prot pos, clustered");
+
+            clusteredFR = initializeKNN_Clusters(FR);
+            log.info("non-prot neg, clustered");
+            clusteredDR = initializeKNN_Clusters(DR);
+            log.info("prot neg, clustered");
+
+
+        }
+
+
+        log.info("clusters initialized");
+        for (int j = 0; j < k_NumBags; j++) {
+            m_Boost.add(AbstractClassifier.makeCopy(adaBoost));
+        }
 
         if (parallelization) {
-            ExecutorService es = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() / 2);
+            ExecutorService es = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
             for (int sampleNum = 0; sampleNum < k_NumBags; sampleNum++) {
                 final Instances CurrentTraininSet = generateCandidateSetsFromCluster(clusteredFG, clusteredFR, clusteredDR);
-//                final Instances CurrentTraininSet = generateCandidateSetsRandomly();
-
                 final int finalSampleNum = sampleNum;
                 es.execute(new Runnable() {
                     @Override
                     public void run() {
-                        m_SampleNumExecuted = finalSampleNum;
                         try {
-                            m_Boost[finalSampleNum].buildClassifier(CurrentTraininSet);
+                            m_Boost.get(finalSampleNum).buildClassifier(CurrentTraininSet);
                         } catch (Exception e) {
                         }
                     }
@@ -155,37 +176,71 @@ public class FAE extends AbstractClassifier implements Classifier {
             es.shutdown();
             es.awaitTermination(k_NumBags, TimeUnit.SECONDS);
 
-        }else {
+        } else {
 
             for (int sampleNum = 0; sampleNum < k_NumBags; sampleNum++) {
-//                final Instances CurrentTraininSet = generateCandidateSetsRandomly();
-                final Instances CurrentTraininSet = generateCandidateSetsFromCluster(clusteredFG, clusteredFR, clusteredDR);
-
-                m_Boost[sampleNum].buildClassifier(CurrentTraininSet);
+                final Instances CurrentTraininSet = generateCandidateSetsFromCluster(this.clusteredFG, this.clusteredFR, this.clusteredDR);
+                m_Boost.get(sampleNum).buildClassifier(CurrentTraininSet);
             }
         }
-//        log.info("calculating EqOp ...");
-        double disc = 100*calculateEquallizedOpportunity();
-//        log.info("EqOp calculated ! ");
+        log.info("training of bags finished. now proceed to find best sequence");
 
-        if (useThreshold) {
-            if ((abs(disc) > bound )) {
-//                log.info("estimating threshold ...");
-                calculateMajorityThreshold(disc);
-                eqOp = disc;
-//                log.info("threshold estimated !");
+        bagsForOB = k_NumBags;
+
+
+        if (this.optimize){
+
+            ArrayList<Double> scores = new ArrayList<>();
+            ArrayList<Double> eqopList = new ArrayList<>();
+            ArrayList<Double> thresList = new ArrayList<>();
+            final int numberOfBagsToCheck = k_NumBags;
+            int start = 1;
+            for (int counter = start; counter <= numberOfBagsToCheck; counter++) {
+                log.info("iteration " + counter + ", out of " + numberOfBagsToCheck);
+
+                if (counter <= numberOfBagsToCheck / 2) {
+                    thresList.add(.5);
+                    eqopList.add(0.);
+                    scores.add(100.);
+                    continue;
+                }
+                k_NumBags = counter;
+                double disc = statistics()[0];
+                if ((abs(disc) > bound)) {
+                    calculateMajorityThreshold(disc);
+                    eqOp = disc;
+                } else {
+                    eqOp = 0.;
+                    threshold = 0.5;
+                }
+                thresList.add(threshold);
+                eqopList.add(disc);
+
+                double[] roundScores = statistics();
+                // give extra weight to fairness
+                scores.add(2 * abs(roundScores[0]) + abs(roundScores[1]));
+                eqOp = 0;
             }
-        }
 
-        if(RRBOption){
-            calculateRBB();
+
+            log.info(scores);
+            // index start from 0 until the index provided (but without considering it so add +1)
+            k_NumBags = scores.indexOf(Collections.min(scores));
+            // this does not use +1 so remove 1
+            eqOp = eqopList.get(k_NumBags);
+            threshold = thresList.get(k_NumBags);
+            log.info("best bags = " + (k_NumBags + 1));
+        }else{
+            double disc = statistics()[0];
+            calculateMajorityThreshold(disc);
+            eqOp = disc;
         }
     }
+
 
     private Instances generateCandidateSetsFromCluster(ClusterSummary clusteredFG, ClusterSummary clusteredFR, ClusterSummary clusteredDR) {
 
         Instances output = new Instances(DG);
-
 
         for (Instance inst: clusteredFG.getPoints()){
             output.add(inst);
@@ -203,24 +258,23 @@ public class FAE extends AbstractClassifier implements Classifier {
         return output;
     }
 
-    private ClusterSummary initializeClusters(Instances inputInstances) throws Exception {
+    private ClusterSummary initializeEM_Clusters(Instances inputInstances) throws Exception {
 
-        clusterAssignments = new HashMap<Integer,Instances>();
+        clusterAssignments = new HashMap<>();
         weka.filters.unsupervised.attribute.Remove filter = new weka.filters.unsupervised.attribute.Remove();
         filter.setAttributeIndices("" + (inputInstances.classIndex() + 1));
         filter.setInputFormat(inputInstances);
         Instances dataClusterer = Filter.useFilter(inputInstances, filter);
 
 
-
         EM clusterer = new EM();
-        clusterer.setMaxIterations(100);
+        clusterer.setMaxIterations(maxClusterIteration);
         clusterer.setNumClusters(-1);
         clusterer.buildClusterer(dataClusterer);
 
         if (clusterer.numberOfClusters() > k_NumBags){
             clusterer = new EM();
-            clusterer.setMaxIterations(100);
+            clusterer.setMaxIterations(maxClusterIteration);
             clusterer.setNumClusters(k_NumBags);
             clusterer.buildClusterer(dataClusterer);
         }
@@ -243,128 +297,99 @@ public class FAE extends AbstractClassifier implements Classifier {
         return clusterSummary;
     }
 
-    private Instances generateCandidateSetsRandomly() {
-        Instances output = new Instances(TrainingSet, 0);
-        DR.randomize(new Random());
-        FG.randomize(new Random());
-        FR.randomize(new Random());
 
-        for (int i = 0; i < DG.size(); i++){
+    private ClusterSummary initializeKNN_Clusters(Instances inputInstances) throws Exception {
 
-            output.add(DG.get(i));
-            try {
-                output.add(DR.get(i));
-            }catch (IndexOutOfBoundsException e){
-                output.add(DR.get(new Random().nextInt(DR.size())));
-            }
-            try {
-                output.add(FG.get(i));
-            }catch (IndexOutOfBoundsException e){
-                output.add(FG.get(new Random().nextInt(FG.size())));
-            }
-            try {
-                output.add(FR.get(i));
-            }catch (IndexOutOfBoundsException e){
-                output.add(FR.get(new Random().nextInt(FR.size())));
-            }
-        }
-        return  output;
-    }
+        clusterAssignments = new HashMap<>();
+        weka.filters.unsupervised.attribute.Remove filter = new weka.filters.unsupervised.attribute.Remove();
+        filter.setAttributeIndices("" + (inputInstances.classIndex() + 1));
+        filter.setInputFormat(inputInstances);
+        Instances dataClusterer = Filter.useFilter(inputInstances, filter);
 
-    public void calculateRBB() throws Exception {
-        final Evaluation eval = new Evaluation(TrainingSet);
 
-        eval.evaluateModel(this, flipedInstances);
-        setRrbVaule(eval.errorRate());
-    }
+        KValid clusterer = new KValid();
+        clusterer.setMaxIterations(maxClusterIteration);
+        clusterer.buildClusterer(dataClusterer);
 
-    private void addSyntheticBias() {
-        // data are already in random order due to initial shuffling
-        int pseudoProtectedCount = 0;
-        flipedInstances = new Instances(TrainingSet, 0);
-        ArrayList<Integer> tempIndexes = new ArrayList<Integer>();
-        int count = 0;
-        for (Instance instance: TrainingSet){
-            if (!instance.stringValue(protectedValueIndex).equals(protectedValueName) && !instance.stringValue(instance.classIndex()).equals(targetClass)){
-                tempIndexes.add(count);
-                pseudoProtectedCount += 1;
-            }
-            count +=1;
+
+        for (int i = 0; i < clusterer.numberOfClusters() ; i++) {
+            clusterAssignments.put(i, new Instances(inputInstances, 0));
         }
 
-        int m = (int)(pseudoProtectedCount*flipProportion);
-        for(int i=0; i< m; i++){
-            TrainingSet.get(tempIndexes.get(i)).setClassValue(targetClass);
-            TrainingSet.get(tempIndexes.get(i)).setClassValue(1.0);
-            flipedInstances.add(TrainingSet.get(tempIndexes.get(i)));
+        for (int i=0; i < dataClusterer.size(); i++) {
+            clusterAssignments.get(clusterer.clusterInstance(dataClusterer.instance(i))).add(inputInstances.instance(i));
         }
+
+        ClusterSummary clusterSummary = new ClusterSummary();
+        clusterSummary.setTotalInstances(inputInstances.size());
+        clusterSummary.setBagInstances(DG.size());
+
+        for(int i = 0 ; i < clusterer.numberOfClusters(); i++) {
+            clusterSummary.insertCluster(clusterAssignments.get(i), clusterAssignments.get(i).size());
+        }
+        return clusterSummary;
     }
 
-    public void done() throws Exception {
-        Evaluation fixedEval = new Evaluation(TrainingSet);
-        fixedEval.evaluateModel(this, TrainingSet);
-        double disc = 100*calculateEquallizedOpportunity();
-        log.info("Overall Training Set After change: Accuracy = " + fixedEval.pctCorrect() + ", au-PRC = " + fixedEval.weightedAreaUnderPRC()*100 + ", au-ROC = " + fixedEval.weightedAreaUnderROC()*100+ ", equallized opportunity = " + disc );
-    }
+
 
     private void calculateMajorityThreshold(double signatureFlag) throws Exception {
-        Instances FG = new Instances(TrainingSet, 0);
-        Instances DG = new Instances(TrainingSet, 0);
+//        Instances FGtemp = new Instances(TrainingSet, 0);
+//        Instances DGtemp = new Instances(TrainingSet, 0);
 
-        for (Instance instance : TrainingSet){
-            if (!instance.stringValue(protectedValueIndex).equals(protectedValueName) && instance.stringValue(instance.classIndex()).equals(targetClass)) {
-                FG.add(instance);
-            } else if(instance.stringValue(protectedValueIndex).equals(protectedValueName) && instance.stringValue(instance.classIndex()).equals(targetClass)){
-                DG.add(instance);
-            }
-        }
+//        for (Instance instance : TrainingSet){
+//            if (!instance.stringValue(protectedValueIndex).equals(protectedValueName) && instance.stringValue(instance.classIndex()).equals(targetClass)) {
+//                FGtemp.add(instance);
+//            } else if(instance.stringValue(protectedValueIndex).equals(protectedValueName) && instance.stringValue(instance.classIndex()).equals(targetClass)){
+//                DGtemp.add(instance);
+//            }
+//        }
 
-        int femalePos = DG.size();
-        int malePos = FG.size();
-        double TPMale = 0.0;
-        double TPFemale = 0.0;
-        double FNMale = 0.0;
-        double FNFemale = 0.0;
+        int protectedPos = DG.size();
+        int non_protectedPos = FG.size();
+        double TPnon_protected = 0.0;
+        double TPprotected = 0.0;
+        double FNnon_protected = 0.0;
+        double FNprotected = 0.0;
 
-        ArrayList<Double> probabilitiesMale = new ArrayList<Double>();
-        ArrayList<Double> probabilitiesFemale = new ArrayList<Double>();
+        ArrayList<Double> probabilitiesnon_protected = new ArrayList<Double>();
+        ArrayList<Double> probabilitiesprotected = new ArrayList<Double>();
 
         for (Instance instance : FG){
             if (this.classifyInstance(instance) == instance.classValue()){
-                TPMale +=1;
+                TPnon_protected +=1;
             }else{
-                FNMale +=1;
-                probabilitiesMale.add(this.distributionForInstance(instance)[1]);
+                FNnon_protected +=1;
+                probabilitiesnon_protected.add(this.distributionForInstance(instance)[1]);
             }
         }
 
         for (Instance instance : DG){
             if (this.classifyInstance(instance) == instance.classValue()){
-                TPFemale +=1;
+                TPprotected +=1;
             }else{
-                FNFemale +=1;
-                probabilitiesFemale.add(this.distributionForInstance(instance)[1]);
+                FNprotected +=1;
+                probabilitiesprotected.add(this.distributionForInstance(instance)[1]);
 
             }
         }
 
         if (signatureFlag < 0) {
-            int y = (int) ((TPFemale / (femalePos)) * malePos - TPMale) ;
-            if (y == probabilitiesMale.size())
+            int y = (int) ((TPprotected / (protectedPos)) * non_protectedPos - TPnon_protected) ;
+            if (y == probabilitiesnon_protected.size())
                 y -= 1;
 
-            Collections.sort(probabilitiesMale);
-            Collections.reverse(probabilitiesMale);
-            threshold = probabilitiesMale.get(y) + .00000000000001;
+            Collections.sort(probabilitiesnon_protected);
+            Collections.reverse(probabilitiesnon_protected);
+            threshold = probabilitiesnon_protected.get(y) + .00000000000001;
 
         }else if(signatureFlag > 0){
-            int y = (int) ((TPMale / (malePos)) * femalePos - TPFemale);
-            if (y == probabilitiesFemale.size())
+            int y = (int) ((TPnon_protected / (non_protectedPos)) * protectedPos - TPprotected);
+            if (y == probabilitiesprotected.size())
                 y -= 1;
 
-            Collections.sort(probabilitiesFemale);
-            Collections.reverse(probabilitiesFemale);
-            threshold = probabilitiesFemale.get(y) + .00000000000001;
+            Collections.sort(probabilitiesprotected);
+            Collections.reverse(probabilitiesprotected);
+            threshold = probabilitiesprotected.get(y) + .00000000000001;
         }
     }
 
@@ -376,8 +401,6 @@ public class FAE extends AbstractClassifier implements Classifier {
         FG = new Instances(TrainingSet, 0);
         DR = new Instances(TrainingSet, 0);
         FR = new Instances(TrainingSet, 0);
-
-        Instances output = new Instances(TrainingSet, 0);
 
         for (Instance instance : TrainingSet){
             if (instance.stringValue(protectedValueIndex).equals(protectedValueName)) {
@@ -405,8 +428,9 @@ public class FAE extends AbstractClassifier implements Classifier {
 
         int bags= (int)(1/((double) DG.size()/(double) maximum)) + 1;
 //        log.info("maximum instances = " + DG.size());
-//        log.info("bags = " + bags);
-        k_NumBags = bags;
+        if (!userDefinedBags)
+            k_NumBags =2* bags;
+        log.info("bags = " + k_NumBags);
 
     }
 
@@ -449,7 +473,7 @@ public class FAE extends AbstractClassifier implements Classifier {
         for (int sampleNum = 0; sampleNum < k_NumBags; sampleNum++) {
 
             try {
-                double results[] = m_Boost[sampleNum].distributionForInstance(ins);
+                double results[] = m_Boost.get(sampleNum).distributionForInstance(ins);
                 sum[0] = sum[0] + results[0];
                 sum[1] = sum[1] + results[1];
             }catch (IllegalArgumentException e){
@@ -473,51 +497,55 @@ public class FAE extends AbstractClassifier implements Classifier {
         return sum;
     }
 
-    private double calculateEquallizedOpportunity() throws Exception {
-//        Instances TestingPredictions = new Instances(TrainingSet);
+    private double [] statistics() throws Exception {
 
-        double tp_male = 0;
-        double tn_male = 0;
-        double tp_female = 0;
-        double tn_female = 0;
-        double fp_male = 0;
-        double fn_male = 0;
-        double fp_female = 0;
-        double fn_female = 0;
+
+        double tp_non_protected = 0;
+        double tn_non_protected = 0;
+        double tp_protected = 0;
+        double tn_protected = 0;
+        double fp_non_protected = 0;
+        double fn_non_protected = 0;
+        double fp_protected = 0;
+        double fn_protected = 0;
 
         for(Instance ins: TrainingSet){
             double label = this.classifyInstance(ins);
             if (ins.stringValue(protectedValueIndex).equals(protectedValueName)) {
                 if (label == ins.classValue()) {
                     if (ins.stringValue(ins.classIndex()).equals(targetClass)) {
-                        tp_female++;
+                        tp_protected++;
                     }else if(ins.stringValue(ins.classIndex()).equals(otherClass)){
-                        tn_female++;
+                        tn_protected++;
                     }
                 }else{
                     if (ins.stringValue(ins.classIndex()).equals(targetClass)) {
-                        fn_female++;
+                        fn_protected++;
                     }else if (ins.stringValue(ins.classIndex()).equals(otherClass)){
-                        fp_female++;
+                        fp_protected++;
                     }
                 }
             }else{
                 if (label == ins.classValue()) {
                     if (ins.stringValue(ins.classIndex()).equals(targetClass)) {
-                        tp_male++;
+                        tp_non_protected++;
                     }else if(ins.stringValue(ins.classIndex()).equals(otherClass)){
-                        tn_male++;
+                        tn_non_protected++;
                     }
                 }else{
                     if (ins.stringValue(ins.classIndex()).equals(targetClass)) {
-                        fn_male++;
+                        fn_non_protected++;
                     }else if(ins.stringValue(ins.classIndex()).equals(otherClass)){
-                        fp_male++;
+                        fp_non_protected++;
                     }
                 }
             }
         }
-        return (tp_male)/(tp_male + fn_male) - (tp_female)/(tp_female + fn_female);
+        double [] output = new double[2];
+        output[0]= (tp_non_protected)/(tp_non_protected + fn_non_protected) - (tp_protected)/(tp_protected + fn_protected);
+        output[1]= 1 - 0.5*((tp_non_protected + tp_protected)/(tp_non_protected + fn_non_protected + tp_protected + fn_protected) +
+                (tn_non_protected + tn_protected)/(tn_non_protected + fp_non_protected + tn_protected + fp_protected));
+        return output;
     }
 
 }

@@ -4,11 +4,13 @@ import weka.classifiers.Classifier;
 import weka.classifiers.Evaluation;
 import weka.classifiers.bayes.NaiveBayes;
 import weka.classifiers.functions.Logistic;
+import weka.classifiers.meta.AdaBoostM1;
 import weka.classifiers.trees.DecisionStump;
 import weka.core.Instance;
 import weka.core.Instances;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.Random;
 
@@ -23,6 +25,7 @@ public class CrossFoldEvaluation {
     private static String targetClass;
     private static String otherClass;
     private static Classifier model;
+    private static String parameters;
 
     private FAE boost;
 
@@ -36,6 +39,10 @@ public class CrossFoldEvaluation {
                                boolean useThreshold) throws Exception {
 
         boost = new FAE(f, protectedValueIndex, protectedValueName, targetClass, otherClass, bound, useThreshold);
+        boost.setParallelization(true);
+        if (parameters.equals("kdd")){
+            boost.setParallelization(false);
+        }
         boost.buildClassifier(data);
     }
 
@@ -43,51 +50,46 @@ public class CrossFoldEvaluation {
         return boost;
     }
 
+    public static ArrayList<Double> FAEF_EM_discList = new ArrayList<Double>();
+    public static ArrayList<Double> FAEF_EM_balacc = new ArrayList<Double>();
+    public static ArrayList<Double> FAEF_EM_protected_tp = new ArrayList<Double>();
+    public static ArrayList<Double> FAEF_EM_non_protected_tp = new ArrayList<Double>();
+    public static ArrayList<Double> FAEF_EM_protected_tn = new ArrayList<Double>();
+    public static ArrayList<Double> FAEF_EM_non_protected_tn = new ArrayList<Double>();
 
-    public static ArrayList<Double> FAEFaccuracy = new ArrayList<Double>();
-    public static ArrayList<Double> FAEFauPRC = new ArrayList<Double>();
-    public static ArrayList<Double> FAEFauROC = new ArrayList<Double>();
-    public static ArrayList<Double> FAEFf1weighted = new ArrayList<Double>();
-    public static ArrayList<Double> FAEFkappa = new ArrayList<Double>();
-    public static ArrayList<Double> FAEFdiscList = new ArrayList<Double>();
-
-    public static ArrayList<Double> SimpleModelDiscList = new ArrayList<Double>();
-    public static ArrayList<Double> SimpleModelauROC = new ArrayList<Double>();
-
-    public static ArrayList<Double> OBaccuracy = new ArrayList<Double>();
-    public static ArrayList<Double> OBauPRC = new ArrayList<Double>();
-    public static ArrayList<Double> OBauROC = new ArrayList<Double>();
-    public static ArrayList<Double> OBf1weighted = new ArrayList<Double>();
-    public static ArrayList<Double> OBdiscList = new ArrayList<Double>();
-    public static ArrayList<Double> OBkappa = new ArrayList<Double>();
+    public static ArrayList<Double> FAEF_KNN_discList = new ArrayList<Double>();
+    public static ArrayList<Double> FAEF_KNN_balacc = new ArrayList<Double>();
+    public static ArrayList<Double> FAEF_KNN_protected_tp = new ArrayList<Double>();
+    public static ArrayList<Double> FAEF_KNN_non_protected_tp = new ArrayList<Double>();
+    public static ArrayList<Double> FAEF_KNN_protected_tn = new ArrayList<Double>();
+    public static ArrayList<Double> FAEF_KNN_non_protected_tn = new ArrayList<Double>();
 
 
-    public static ArrayList<Double> accuracythresholdBoosting = new ArrayList<Double>();
-    public static ArrayList<Double> auPRCthresholdBoosting = new ArrayList<Double>();
-    public static ArrayList<Double> auROCthresholdBoosting = new ArrayList<Double>();
-    public static ArrayList<Double> f1weightedthresholdBoosting = new ArrayList<Double>();
-    public static ArrayList<Double> kappaweightedthresholdBoosting = new ArrayList<Double>();
-
-    public static ArrayList<Double> accuracyconfidenceBoosting = new ArrayList<Double>();
-    public static ArrayList<Double> auPRCconfidenceBoosting = new ArrayList<Double>();
-    public static ArrayList<Double> auROCconfidenceBoosting = new ArrayList<Double>();
-    public static ArrayList<Double> f1weightedconfidenceBoosting = new ArrayList<Double>();
-    public static ArrayList<Double> kappaweightedconfidenceBoosting = new ArrayList<Double>();
+    public static ArrayList<Double> OB_EM_discList = new ArrayList<Double>();
+    public static ArrayList<Double> OB_EM_balacc = new ArrayList<Double>();
+    public static ArrayList<Double> OB_EM_protected_tp = new ArrayList<Double>();
+    public static ArrayList<Double> OB_EM_non_protected_tp = new ArrayList<Double>();
+    public static ArrayList<Double> OB_EM_protected_tn = new ArrayList<Double>();
+    public static ArrayList<Double> OB_EM_non_protected_tn = new ArrayList<Double>();
 
 
+    public static ArrayList<Double> OB_KNN_discList = new ArrayList<Double>();
+    public static ArrayList<Double> OB_KNN_balacc = new ArrayList<Double>();
+    public static ArrayList<Double> OB_KNN_protected_tp = new ArrayList<Double>();
+    public static ArrayList<Double> OB_KNN_non_protected_tp = new ArrayList<Double>();
+    public static ArrayList<Double> OB_KNN_protected_tn = new ArrayList<Double>();
+    public static ArrayList<Double> OB_KNN_non_protected_tn = new ArrayList<Double>();
 
-    public static double testForSE = 0;
 
-    public static ArrayList<Double> discListthresholdBoosting = new ArrayList<Double>();
-    public static ArrayList<Double> discListconfidenceBoosting = new ArrayList<Double>();
+
 
     public static void main(String[] argv) throws Exception {
 
         String modelString = argv[0];
-        final String parameters = argv[1];
-
-//        String modelString = "LR";
-//        String parameters = "adult-gender";
+        parameters = argv[1];
+        int iterations = 10;
+//        String modelString = "DS";
+//        parameters = "bank";
 
         double bound = 0.0;
         BufferedReader reader = null;
@@ -100,7 +102,7 @@ public class CrossFoldEvaluation {
             Logistic xxx = new Logistic();
             if (parameters.equals("kdd")) {
                 // big dataset use less iterations
-                xxx.setMaxIts(5);
+                xxx.setMaxIts(1);
             }
             model = xxx;
         } else {
@@ -108,54 +110,41 @@ public class CrossFoldEvaluation {
         }
 
         if (parameters.equals("adult-gender")) {
-//            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/adult.arff"));
-            reader = new BufferedReader(new FileReader(argv[2]));
+            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/adult.arff"));
+//            reader = new BufferedReader(new FileReader(argv[2]));
             protectedValueName = " Female";
-            protectedValueIndex = 8;
-            targetClass = " >50K";
-            otherClass = " <=50K";
-        } else if (parameters.equals("adult-race")) {
-//            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/adult.arff"));
-            reader = new BufferedReader(new FileReader(argv[2]));
-            protectedValueName = " Minorities";
             protectedValueIndex = 7;
             targetClass = " >50K";
             otherClass = " <=50K";
-        } else if (parameters.equals("dutch")) {
-//            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/dutch.arff"));
-            reader = new BufferedReader(new FileReader(argv[2]));
-            protectedValueName = "2"; // women
-            protectedValueIndex = 0;
-            targetClass = "2_1"; // high level
-            otherClass = "5_4_9";
         } else if (parameters.equals("kdd")) {
-//            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/kdd.arff"));
-            reader = new BufferedReader(new FileReader(argv[2]));
+            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/out/artifacts/BiasForStreams_jar/kdd.arff"));
+//            reader = new BufferedReader(new FileReader(argv[2]));
+            iterations = 3;
             protectedValueName = "Female";
             protectedValueIndex = 12;
             targetClass = "1";
             otherClass = "0";
-        } else if (parameters.equals("german")) {
-            protectedValueName = "female";
-            protectedValueIndex = 20;
-            targetClass = "bad";
-            otherClass = "good";
         } else if (parameters.equals("propublica")) {
-//            reader = new BufferedReader(new FileReader("/home/iosifidis/compass_zafar.arff"));
-            reader = new BufferedReader(new FileReader(argv[2]));
+            reader = new BufferedReader(new FileReader("/home/iosifidis/compass_zafar.arff"));
+//            reader = new BufferedReader(new FileReader(argv[2]));
             protectedValueName = "1";
             protectedValueIndex = 4;
             targetClass = "1";
             otherClass = "-1";
+        }  else if (parameters.equals("bank")) {
+            reader = new BufferedReader(new FileReader("/home/iosifidis/BiasForStreams/bank-full.arff"));
+            protectedValueName = "single";
+            protectedValueIndex = 2;
+            targetClass = "yes";
+            otherClass = "no";
         } else {
             System.exit(1);
         }
 
         final Instances data = new Instances(reader);
         reader.close();
-        int iterations = 20;
-        provideStatistics(data);
-        log.info("dataset = " + parameters);
+
+
         int k = 0;
         while (k < iterations) {
             k++;
@@ -171,69 +160,89 @@ public class CrossFoldEvaluation {
                 int testSize = randData.numInstances() - trainSize;
                 Instances train = new Instances(randData, 0, trainSize);
                 Instances test = new Instances(randData, trainSize, testSize);
-                testForSE += testSize;
 
-                Classifier newModel = AbstractClassifier.makeCopy(model);
-                newModel.buildClassifier(train);
-                double[] measures = EvaluateClassifier(newModel, train, test);
-                double disc = equalOpportunityMeasurement(newModel, test, protectedValueIndex, protectedValueName, targetClass, otherClass);
-
-                SimpleModelauROC.add(measures[2]);
-                SimpleModelDiscList.add(disc);
+                AdaBoostM1 adaBoostM1 = new AdaBoostM1();
+                adaBoostM1.setClassifier(AbstractClassifier.makeCopy(model));
+                adaBoostM1.setNumIterations(25);
+                adaBoostM1.buildClassifier(train);
 
 
-                final CrossFoldEvaluation FAEF = new CrossFoldEvaluation(AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, train, bound, true);
-                final SDB confidenceBoosting = new SDB(AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, bound);
-                confidenceBoosting.setNumIterations(25);
-                confidenceBoosting.buildClassifier(train);
-                final SMT thresholdBoosting = new SMT(AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, bound);
-                thresholdBoosting.setNumIterations(25);
-                thresholdBoosting.buildClassifier(train);
 
-                measures = EvaluateClassifier(FAEF.getBoost(), train, test);
-                disc = equalOpportunityMeasurement(FAEF.getBoost(), test, protectedValueIndex, protectedValueName, targetClass, otherClass);
-                FAEFaccuracy.add(measures[0]);
-                FAEFauPRC.add(measures[1]);
-                FAEFauROC.add(measures[2]);
-                FAEFf1weighted.add(measures[3]);
-                FAEFkappa.add(measures[4]);
-                FAEFdiscList.add(disc);
-//                double[] FBFpredictions = getBinaryPredictions(FAEF.getBoost(), test);
+
+
+
+                FAE FAEF_EM = new FAE(AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, bound, true);
+                FAEF_EM.setParallelization(true);
+                FAEF_EM.setMaxClusterIteration(10);
+                if (parameters.equals("kdd")){
+                    FAEF_EM.setParallelization(false);
+                }
+                FAEF_EM.setDECIDE_CLUSTER_METHOD(0);
+                FAEF_EM.buildClassifier(train);
+
+                double[] measures = EvaluateClassifier(FAEF_EM, train, test);
+                double[] disc = equalOpportunityMeasurement(FAEF_EM, test, protectedValueIndex, protectedValueName, targetClass, otherClass);
+
+
+                FAEF_EM_balacc.add(measures[5]);
+                FAEF_EM_discList.add(disc[4]);
+                FAEF_EM_protected_tp.add(disc[0]);
+                FAEF_EM_non_protected_tp.add(disc[1]);
+                FAEF_EM_protected_tn.add(disc[2]);
+                FAEF_EM_non_protected_tn.add(disc[3]);
 
                 // if EqOp is 0 then no special treatment is employed, this equals to OB model
-                FAEF.getBoost().setEqOp(0.0);
-                measures = EvaluateClassifier(FAEF.getBoost(), train, test);
-                disc = equalOpportunityMeasurement(FAEF.getBoost(), test, protectedValueIndex, protectedValueName, targetClass, otherClass);
-                OBaccuracy.add(measures[0]);
-                OBauPRC.add(measures[1]);
-                OBauROC.add(measures[2]);
-                OBf1weighted.add(measures[3]);
-                OBkappa.add(measures[4]);
-                OBdiscList.add(disc);
-//                double[] Easypredictions = getBinaryPredictions(FAEF.getBoost(), test);
+                FAEF_EM.setEqOp(0.0);
+                measures = EvaluateClassifier(FAEF_EM, train, test);
+                log.info("OB EM");
 
-                measures = EvaluateClassifier(thresholdBoosting, train, test);
-                disc = equalOpportunityMeasurement(thresholdBoosting, test, protectedValueIndex, protectedValueName, targetClass, otherClass);
-                accuracythresholdBoosting.add(measures[0]);
-                auPRCthresholdBoosting.add(measures[1]);
-                auROCthresholdBoosting.add(measures[2]);
-                f1weightedthresholdBoosting.add(measures[3]);
-                kappaweightedthresholdBoosting.add(measures[4]);
-                discListthresholdBoosting.add(disc);
-                double[] TBpredictions = getBinaryPredictions(thresholdBoosting, test);
+                disc = equalOpportunityMeasurement(FAEF_EM, test, protectedValueIndex, protectedValueName, targetClass, otherClass);
+                OB_EM_balacc.add(measures[5]);
+                OB_EM_discList.add(disc[4]);
+                OB_EM_protected_tp.add(disc[0]);
+                OB_EM_non_protected_tp.add(disc[1]);
+                OB_EM_protected_tn.add(disc[2]);
+                OB_EM_non_protected_tn.add(disc[3]);
+
+                //////////////////////////////////////////////////////
+
+                FAE FAEF_KNN = new FAE(AbstractClassifier.makeCopy(model), protectedValueIndex, protectedValueName, targetClass, otherClass, bound, true);
+                FAEF_KNN.setParallelization(true);
+                FAEF_KNN.setMaxClusterIteration(10);
+
+                if (parameters.equals("kdd")){
+                    FAEF_KNN.setParallelization(false);
+                }
+                FAEF_KNN.setDECIDE_CLUSTER_METHOD(1);
+                FAEF_KNN.buildClassifier(train);
+
+                measures = EvaluateClassifier(FAEF_KNN, train, test);
+                disc = equalOpportunityMeasurement(FAEF_KNN, test, protectedValueIndex, protectedValueName, targetClass, otherClass);
 
 
-                measures = EvaluateClassifier(confidenceBoosting, train, test);
-                disc = equalOpportunityMeasurement(confidenceBoosting, test, protectedValueIndex, protectedValueName, targetClass, otherClass);
-                accuracyconfidenceBoosting.add(measures[0]);
-                auPRCconfidenceBoosting.add(measures[1]);
-                auROCconfidenceBoosting.add(measures[2]);
-                f1weightedconfidenceBoosting.add(measures[3]);
-                kappaweightedconfidenceBoosting.add(measures[4]);
-                discListconfidenceBoosting.add(disc);
-                double[] CBpredictions = getBinaryPredictions(confidenceBoosting, test);
+                FAEF_KNN_balacc.add(measures[5]);
+                FAEF_KNN_discList.add(disc[4]);
+                FAEF_KNN_protected_tp.add(disc[0]);
+                FAEF_KNN_non_protected_tp.add(disc[1]);
+                FAEF_KNN_protected_tn.add(disc[2]);
+                FAEF_KNN_non_protected_tn.add(disc[3]);
 
-             } catch (Exception e) {
+                // if EqOp is 0 then no special treatment is employed, this equals to OB model
+                FAEF_KNN.setEqOp(0.0);
+                measures = EvaluateClassifier(FAEF_KNN, train, test);
+                log.info("OB KNN");
+
+                disc = equalOpportunityMeasurement(FAEF_KNN, test, protectedValueIndex, protectedValueName, targetClass, otherClass);
+                OB_KNN_balacc.add(measures[5]);
+                OB_KNN_discList.add(disc[4]);
+                OB_KNN_protected_tp.add(disc[0]);
+                OB_KNN_non_protected_tp.add(disc[1]);
+                OB_KNN_protected_tn.add(disc[2]);
+                OB_KNN_non_protected_tn.add(disc[3]);
+
+
+
+            } catch (Exception e) {
                 log.info("crushed, rerun iteration:");
                 e.printStackTrace();
                 k--;
@@ -241,45 +250,47 @@ public class CrossFoldEvaluation {
 
         }
 
-        testForSE = testForSE / iterations;
         log.info("dataset = " + parameters);
-//        calculateSD(FAEFaccuracy, "FAE Accuracy");
-//        calculateSD(FAEFauPRC, "FAE Au-PRC");
-        calculateSD(FAEFauROC, "FAE Au-ROC");
-//        calculateSD(FAEFf1weighted, "FAE F1");
-//        calculateSD(FAEFkappa, "FAE kappa");
-        calculateSD(FAEFdiscList, "FAE disc");
+        log.info("modelString = " + modelString);
 
-//        calculateSD(OBaccuracy, "Easy Accuracy");
-//        calculateSD(OBauPRC, "Easy Au-PRC");
-        calculateSD(OBauROC, "OB Au-ROC");
-//        calculateSD(OBf1weighted, "Easy F1");
-//        calculateSD(OBkappa, "Easy kappa");
-        calculateSD(OBdiscList, "OB disc");
-
-//        calculateSD(accuracythresholdBoosting, "TB Accuracy");
-//        calculateSD(auPRCthresholdBoosting, "TB Au-PRC");
-        calculateSD(auROCthresholdBoosting, "SMT Au-ROC");
-//        calculateSD(f1weightedthresholdBoosting, "TB F1");
-//        calculateSD(kappaweightedthresholdBoosting, "TB kappa");
-        calculateSD(discListthresholdBoosting, "SMT disc");
-
-//        calculateSD(accuracyconfidenceBoosting, "CB Accuracy");
-//        calculateSD(auPRCconfidenceBoosting, "CB Au-PRC");
-        calculateSD(auROCconfidenceBoosting, "SDB Au-ROC");
-//        calculateSD(f1weightedconfidenceBoosting, "CB F1");
-//        calculateSD(kappaweightedconfidenceBoosting, "CB kappa");
-        calculateSD(discListconfidenceBoosting, "SDB disc");
+        log.info("**************************************************");
+        calculateSD(FAEF_EM_balacc, "FAEF EM balacc");
+        calculateSD(FAEF_EM_discList, "FAEF EM disc");
+        calculateSD(FAEF_EM_protected_tp, "FAEF EM Prot. TP");
+        calculateSD(FAEF_EM_non_protected_tp, "FAEF EM Non-Prot. TP");
+        calculateSD(FAEF_EM_protected_tn, "FAEF EM Prot. TN");
+        calculateSD(FAEF_EM_non_protected_tn, "FAEF EM Non-Prot. TN");
+        log.info("**************************************************");
 
 
+        calculateSD(OB_EM_balacc, "OB EM balacc");
+        calculateSD(OB_EM_discList, "OB EM disc");
+        calculateSD(OB_EM_protected_tp, "OB EM Prot. TP");
+        calculateSD(OB_EM_non_protected_tp, "OB EM Non-Prot. TP");
+        calculateSD(OB_EM_protected_tn, "OB EM Prot. TN");
+        calculateSD(OB_EM_non_protected_tn, "OB EM Non-Prot. TN");
+        log.info("**************************************************");
 
-        calculateSD(SimpleModelauROC, "Model " +modelString + " Au-ROC");
-        calculateSD(SimpleModelDiscList, "Model " + modelString + " disc");
+        calculateSD(FAEF_KNN_balacc, "FAEF KNN balacc");
+        calculateSD(FAEF_KNN_discList, "FAEF KNN disc");
+        calculateSD(FAEF_KNN_protected_tp, "FAEF KNN Prot. TP");
+        calculateSD(FAEF_KNN_non_protected_tp, "FAEF KNN Non-Prot. TP");
+        calculateSD(FAEF_KNN_protected_tn, "FAEF KNN Prot. TN");
+        calculateSD(FAEF_KNN_non_protected_tn, "FAEF KNN Non-Prot. TN");
+        log.info("**************************************************");
+
+
+        calculateSD(OB_KNN_balacc, "OB KNN balacc");
+        calculateSD(OB_KNN_discList, "OB KNN disc");
+        calculateSD(OB_KNN_protected_tp, "OB KNN Prot. TP");
+        calculateSD(OB_KNN_non_protected_tp, "OB KNN Non-Prot. TP");
+        calculateSD(OB_KNN_protected_tn, "OB KNN Prot. TN");
+        calculateSD(OB_KNN_non_protected_tn, "OB KNN Non-Prot. TN");
+        log.info("**************************************************");
 
     }
 
-
-    private static void provideStatistics(Instances data) {
+    private static int provideStatistics(Instances data) {
         data.setClassIndex(data.numAttributes() - 1);
 
         ArrayList<Instance> DG = new ArrayList<Instance>();
@@ -310,20 +321,18 @@ public class CrossFoldEvaluation {
         log.info("DG = " + DG.size());
         log.info("FG = " + FG.size());
         log.info("numAttributes = " + data.numAttributes());
+        int maximum = -1;
 
+        if (DR.size() > maximum)
+            maximum = DR.size();
+        if (FR.size() > maximum)
+            maximum = FR.size();
+        if (FG.size() > maximum)
+            maximum = FG.size();
+
+        int bags = (int) (1 / ((double) DG.size() / (double) maximum)) + 1;
+        return bags;
     }
-
-    private static double[] getBinaryPredictions(Classifier clf, Instances test) throws Exception {
-        double preds[] = new double[test.size()];
-        int index = 0;
-        for (Instance instance : test) {
-            preds[index] = clf.classifyInstance(instance);
-            index++;
-        }
-
-        return preds;
-    }
-
 
     public static void calculateSD(ArrayList<Double> numArray, String measurement) {
         double sum = 0.0, standardDeviation = 0.0;
@@ -340,19 +349,21 @@ public class CrossFoldEvaluation {
 
         standardDeviation = Math.sqrt(standardDeviation);
 
-        double standardError = standardDeviation / Math.sqrt(testForSE);
-        log.info(measurement + " mean = " + mean + ", St.Error = " + standardError + ", st.Dev = " + standardDeviation);
+//        double standardError = standardDeviation / Math.sqrt(testForSE);
+        log.info(measurement + " mean = " + mean );//+ ", St.Error = " + standardError + ", st.Dev = " + standardDeviation);
     }
+
 
 
     public static double[] EvaluateClassifier(Classifier classifier, Instances training, Instances testing) throws Exception {
 
         final Evaluation eval = new Evaluation(training);
         eval.evaluateModel(classifier, testing);
-        return new double[]{eval.pctCorrect(), eval.weightedAreaUnderPRC() * 100, eval.weightedAreaUnderROC() * 100, eval.weightedFMeasure() * 100, eval.kappa() * 100};
+        double balanced_acc =100* (eval.trueNegativeRate(1) + eval.truePositiveRate(1)) / 2;
+        return new double[]{eval.pctCorrect(), eval.weightedAreaUnderPRC() * 100, eval.weightedAreaUnderROC() * 100, eval.weightedFMeasure() * 100, eval.kappa() * 100, balanced_acc };
     }
 
-    private static double equalOpportunityMeasurement(Classifier classifier,
+    private static double [] equalOpportunityMeasurement(Classifier classifier,
                                                       Instances testing,
                                                       int protectedValueIndex,
                                                       String protectedValueName,
@@ -426,6 +437,15 @@ public class CrossFoldEvaluation {
                 }
             }
         }
-        return 100 * ((tp_male) / (tp_male + fn_male) - (tp_female) / (tp_female + fn_female));
+
+
+        double [] output = new double[5];
+        output[0] = 100*(tp_female) / (tp_female + fn_female);
+        output[1] =  100*(tp_male) / (tp_male + fn_male);
+        output[2] = 100*(tn_female) / (tn_female + fp_female);
+        output[3] = 100*(tn_male) / (tn_male + fp_male);
+        output[4] = 100 * ((tp_male) / (tp_male + fn_male) - (tp_female) / (tp_female + fn_female));
+
+        return output;
     }
 }

@@ -40,12 +40,8 @@ public class ClusterSummary {
 
     public Instances getPoints() {
         Instances output = new Instances(arrayOfCluster.get(0),0);
-//        System.out.println("Clusters = " + arrayOfCluster.size());
-
         for (int i=0; i< arrayOfCluster.size(); i++){
             final Random rand = new Random((int) System.currentTimeMillis());   // create seeded number generator
-//            System.out.println("Cluster's " + i + " size = " + arrayOfClusterSize.get(i));
-
             arrayOfCluster.get(i).randomize(rand);
             try {
                 for (int j = 0; j < arrayOfClusterSize.get(i) - 1; j++) {
@@ -55,7 +51,6 @@ public class ClusterSummary {
             } catch (Exception e){
                 continue;
             }
-//            System.out.println("withdraw = " + output.size());
         }
 
         return output;
